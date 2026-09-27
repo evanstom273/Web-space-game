@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber'
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from 'react'
 import { CelestialSystem } from './space/CelestialBodies'
 import { CosmicBackdrop, SpeedDust } from './space/CosmicBackdrop'
 import { FlightController } from './space/FlightController'
@@ -7,18 +7,18 @@ import { makeSystem } from './space/generator'
 import { PostProcessing } from './space/PostProcessing'
 import type { Controls, SystemData } from './space/types'
 
-function Scene({ system, controls }: { system: SystemData; controls: React.MutableRefObject<Controls> }) {
+function Scene({ system, controls }: { system: SystemData; controls: MutableRefObject<Controls> }) {
   return <>
     <fog attach="fog" args={['#010207', 125, 340]} />
     <CosmicBackdrop seed={system.seed} environment={system.environment} />
     <CelestialSystem system={system} />
-    <SpeedDust seed={system.seed} controls={controls} />
+    <SpeedDust seed={system.seed} density={system.environment.dustDensity} controls={controls} />
     <FlightController controls={controls} />
     <PostProcessing />
   </>
 }
 
-function MobileControls({ controls }: { controls: React.MutableRefObject<Controls> }) {
+function MobileControls({ controls }: { controls: MutableRefObject<Controls> }) {
   const stick = useRef<HTMLDivElement>(null)
   const nub = useRef<HTMLDivElement>(null)
   const stickPointer = useRef<number | null>(null)
