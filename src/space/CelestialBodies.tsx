@@ -174,7 +174,7 @@ function Sun({ system }: { system: SystemData }) {
       <meshBasicMaterial
         color={system.starColor}
         transparent
-        opacity={0.16}
+        opacity={0.22}
         side={THREE.BackSide}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
@@ -186,7 +186,7 @@ function Sun({ system }: { system: SystemData }) {
       <meshBasicMaterial
         color={system.starColor}
         transparent
-        opacity={0.045}
+        opacity={0.075}
         side={THREE.BackSide}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
@@ -198,10 +198,15 @@ function Sun({ system }: { system: SystemData }) {
 
 export function CelestialSystem({ system }: { system: SystemData }) {
   return <>
-    <ambientLight intensity={0.018} />
+    <ambientLight color={system.environment.ambientColor} intensity={system.environment.ambientIntensity} />
+    <hemisphereLight
+      color={system.environment.hazeSecondary}
+      groundColor="#05030a"
+      intensity={system.environment.ambientIntensity * 0.72}
+    />
     <pointLight
       position={[0, 0, 0]}
-      intensity={1450}
+      intensity={1650}
       distance={240}
       decay={1.65}
       color={system.starColor}
