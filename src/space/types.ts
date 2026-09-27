@@ -42,6 +42,18 @@ export type SpaceEnvironment = {
   galacticBandRotation: [number, number, number]
   starDensity: number
   dustDensity: number
+  hazeColor: string
+  hazeSecondary: string
+  hazeStrength: number
+  fogColor: string
+  fogDensity: number
+  ambientColor: string
+  ambientIntensity: number
+  gradeColor: string
+  gradeStrength: number
+  bloomStrength: number
+  bloomRadius: number
+  bloomThreshold: number
 }
 
 export type SystemData = {

@@ -5,7 +5,7 @@ import { rng } from './generator'
 import type { Controls, SpaceEnvironment } from './types'
 import type { MutableRefObject } from 'react'
 
-const deepVertex = `
+const skyVertex = `
 varying vec3 vDir;
 void main() {
   vDir = normalize(position);
@@ -14,22 +14,22 @@ void main() {
 `
 
 const deepFragment = `
+uniform vec3 uHazeA;
+uniform vec3 uHazeB;
+uniform float uStrength;
+uniform float uSeed;
 varying vec3 vDir;
-void main() {
-  float upper = smoothstep(-0.7, 0.9, vDir.y);
-  float side = 0.5 + 0.5 * sin(vDir.x * 2.2 + vDir.z * 1.7);
-  vec3 a = vec3(0.002, 0.005, 0.014);
-  vec3 b = vec3(0.008, 0.014, 0.032);
-  vec3 c = mix(a, b, upper * 0.55 + side * 0.08);
-  gl_FragColor = vec4(c, 1.0);
-}
-`
 
-const nebulaVertex = `
-varying vec3 vDir;
 void main() {
-  vDir = normalize(position);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  float upper = smoothstep(-0.85, 0.9, vDir.y);
+  float waveA = 0.5 + 0.5 * sin(vDir.x * 3.0 + vDir.z * 2.1 + uSeed * 0.001);
+  float waveB = 0.5 + 0.5 * sin(vDir.y * 4.2 - vDir.x * 1.8 + uSeed * 0.0017);
+  float broad = smoothstep(0.18, 0.92, waveA * 0.66 + waveB * 0.34);
+  vec3 blackBlue = vec3(0.002, 0.004, 0.012);
+  vec3 haze = mix(uHazeA, uHazeB, upper * 0.55 + waveB * 0.3);
+  float hazeMix = (0.055 + broad * 0.12) * uStrength;
+  vec3 color = mix(blackBlue, haze, hazeMix);
+  gl_FragColor = vec4(color, 1.0);
 }
 `
 
@@ -72,18 +72,37 @@ float fbm(vec3 p) {
 }
 
 void main() {
-  vec3 p = vDir * 2.6 + vec3(uSeed * 0.013, uSeed * 0.021, uSeed * 0.008);
+  vec3 p = vDir * 2.28 + vec3(uSeed * 0.013, uSeed * 0.021, uSeed * 0.008);
   float broad = fbm(p);
-  float wisps = fbm(p * 2.7 + vec3(4.1, -2.4, 1.3));
-  float filaments = fbm(p * 6.0 + vec3(-1.0, 3.2, 2.1));
-  float field = broad * 0.67 + wisps * 0.25 + filaments * 0.08;
-  float threshold = mix(0.70, 0.48, uDensity);
-  float cloud = smoothstep(threshold, threshold + 0.22, field);
-  float breakup = smoothstep(0.22, 0.82, wisps);
-  float alpha = cloud * breakup * uOpacity;
-  vec3 color = mix(uColorA, uColorB, smoothstep(0.25, 0.78, wisps));
-  color *= 0.4 + cloud * 0.75;
+  float wisps = fbm(p * 2.35 + vec3(4.1, -2.4, 1.3));
+  float filaments = fbm(p * 5.2 + vec3(-1.0, 3.2, 2.1));
+  float field = broad * 0.7 + wisps * 0.23 + filaments * 0.07;
+  float threshold = mix(0.69, 0.43, uDensity);
+  float cloud = smoothstep(threshold, threshold + 0.2, field);
+  float breakup = smoothstep(0.16, 0.8, wisps);
+  float alpha = cloud * (0.56 + breakup * 0.44) * uOpacity;
+  vec3 color = mix(uColorA, uColorB, smoothstep(0.2, 0.82, wisps));
+  color *= 0.55 + cloud * 0.95;
   gl_FragColor = vec4(color, alpha);
+}
+`
+
+const hazeFragment = `
+uniform vec3 uColorA;
+uniform vec3 uColorB;
+uniform float uStrength;
+uniform float uSeed;
+varying vec3 vDir;
+
+void main() {
+  vec3 d = normalize(vDir);
+  float a = 0.5 + 0.5 * sin(d.x * 4.4 + d.z * 2.7 + uSeed * 0.0011);
+  float b = 0.5 + 0.5 * sin(d.y * 3.1 - d.x * 2.2 + uSeed * 0.0019);
+  float c = 0.5 + 0.5 * sin((d.x + d.y + d.z) * 5.7 - uSeed * 0.0007);
+  float mass = smoothstep(0.24, 0.86, a * 0.5 + b * 0.32 + c * 0.18);
+  float veil = 0.035 + mass * 0.11;
+  vec3 color = mix(uColorA, uColorB, b);
+  gl_FragColor = vec4(color, veil * uStrength);
 }
 `
 
@@ -104,7 +123,7 @@ function makeSphericalPoints(seed: number, count: number, minRadius: number, max
 function StarLayer({ seed, count, size, color, opacity }: { seed: number; count: number; size: number; color: string; opacity: number }) {
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.BufferAttribute(makeSphericalPoints(seed, count, 130, 285), 3))
+    g.setAttribute('position', new THREE.BufferAttribute(makeSphericalPoints(seed, count, 135, 286), 3))
     return g
   }, [seed, count])
 
@@ -119,19 +138,20 @@ function StarLayer({ seed, count, size, color, opacity }: { seed: number; count:
       opacity={opacity}
       depthWrite={false}
       blending={THREE.AdditiveBlending}
+      toneMapped={false}
     />
   </points>
 }
 
-function GalacticBand({ seed, strength, rotation }: { seed: number; strength: number; rotation: [number, number, number] }) {
+function GalacticBand({ seed, strength, rotation, color }: { seed: number; strength: number; rotation: [number, number, number]; color: string }) {
   const geometry = useMemo(() => {
     const r = rng(seed ^ 0x17a2f13)
-    const count = Math.round(2600 * Math.max(0.15, strength))
+    const count = Math.round(3200 * Math.max(0.15, strength))
     const data = new Float32Array(count * 3)
     for (let i = 0; i < count; i++) {
-      const radius = 165 + r() * 100
+      const radius = 170 + r() * 95
       const lon = r() * Math.PI * 2
-      const lat = (r() + r() + r() + r() - 2) * 0.13
+      const lat = (r() + r() + r() + r() - 2) * 0.14
       data[i * 3] = Math.cos(lat) * Math.cos(lon) * radius
       data[i * 3 + 1] = Math.sin(lat) * radius
       data[i * 3 + 2] = Math.cos(lat) * Math.sin(lon) * radius
@@ -147,13 +167,14 @@ function GalacticBand({ seed, strength, rotation }: { seed: number; strength: nu
   return <group rotation={rotation}>
     <points geometry={geometry} renderOrder={-5}>
       <pointsMaterial
-        color="#b9c8dc"
-        size={0.27}
+        color={color}
+        size={0.3}
         sizeAttenuation
         transparent
-        opacity={Math.min(0.38, strength)}
+        opacity={Math.min(0.44, strength)}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
+        toneMapped={false}
       />
     </points>
   </group>
@@ -163,9 +184,9 @@ function Nebula({ seed, environment, index }: { seed: number; environment: Space
   const uniforms = useMemo(() => ({
     uColorA: { value: new THREE.Color(index === 0 ? environment.nebulaPrimary : environment.nebulaSecondary) },
     uColorB: { value: new THREE.Color(index === 0 ? environment.nebulaSecondary : environment.nebulaPrimary) },
-    uDensity: { value: environment.nebulaDensity * (index === 0 ? 1 : 0.84) },
+    uDensity: { value: environment.nebulaDensity * (index === 0 ? 1 : 0.9) },
     uSeed: { value: seed + index * 971 },
-    uOpacity: { value: index === 0 ? 0.46 : 0.28 },
+    uOpacity: { value: index === 0 ? 0.72 : 0.5 },
   }), [seed, environment, index])
 
   const rotation: [number, number, number] = index === 0
@@ -173,16 +194,41 @@ function Nebula({ seed, environment, index }: { seed: number; environment: Space
     : [environment.nebulaRotation[1] + 1.2, environment.nebulaRotation[2] - 0.8, environment.nebulaRotation[0] + 0.5]
 
   return <mesh rotation={rotation} renderOrder={-20}>
-    <sphereGeometry args={[240 - index * 7, 48, 32]} />
+    <sphereGeometry args={[244 - index * 8, 48, 32]} />
     <shaderMaterial
       uniforms={uniforms}
-      vertexShader={nebulaVertex}
+      vertexShader={skyVertex}
       fragmentShader={nebulaFragment}
       side={THREE.BackSide}
       transparent
       depthWrite={false}
       depthTest={false}
       blending={THREE.AdditiveBlending}
+      toneMapped={false}
+    />
+  </mesh>
+}
+
+function HazeShell({ seed, environment }: { seed: number; environment: SpaceEnvironment }) {
+  const uniforms = useMemo(() => ({
+    uColorA: { value: new THREE.Color(environment.hazeColor) },
+    uColorB: { value: new THREE.Color(environment.hazeSecondary) },
+    uStrength: { value: environment.hazeStrength },
+    uSeed: { value: seed },
+  }), [seed, environment])
+
+  return <mesh rotation={[environment.nebulaRotation[2], environment.nebulaRotation[0], environment.nebulaRotation[1]]} renderOrder={-30}>
+    <sphereGeometry args={[267, 36, 24]} />
+    <shaderMaterial
+      uniforms={uniforms}
+      vertexShader={skyVertex}
+      fragmentShader={hazeFragment}
+      side={THREE.BackSide}
+      transparent
+      depthWrite={false}
+      depthTest={false}
+      blending={THREE.AdditiveBlending}
+      toneMapped={false}
     />
   </mesh>
 }
@@ -190,7 +236,13 @@ function Nebula({ seed, environment, index }: { seed: number; environment: Space
 export function CosmicBackdrop({ seed, environment }: { seed: number; environment: SpaceEnvironment }) {
   const ref = useRef<THREE.Group>(null)
   const { camera } = useThree()
-  const density = THREE.MathUtils.clamp(environment.starDensity, 0.5, 1.4)
+  const density = THREE.MathUtils.clamp(environment.starDensity, 0.5, 1.45)
+  const deepUniforms = useMemo(() => ({
+    uHazeA: { value: new THREE.Color(environment.hazeColor) },
+    uHazeB: { value: new THREE.Color(environment.hazeSecondary) },
+    uStrength: { value: environment.hazeStrength },
+    uSeed: { value: seed },
+  }), [seed, environment])
 
   useFrame(() => {
     if (ref.current) ref.current.position.copy(camera.position)
@@ -198,24 +250,34 @@ export function CosmicBackdrop({ seed, environment }: { seed: number; environmen
 
   return <group ref={ref}>
     <mesh renderOrder={-100}>
-      <sphereGeometry args={[298, 40, 28]} />
+      <sphereGeometry args={[300, 40, 28]} />
       <shaderMaterial
-        vertexShader={deepVertex}
+        uniforms={deepUniforms}
+        vertexShader={skyVertex}
         fragmentShader={deepFragment}
         side={THREE.BackSide}
         depthWrite={false}
         depthTest={false}
+        toneMapped={false}
       />
     </mesh>
+
+    <HazeShell seed={seed} environment={environment} />
 
     {Array.from({ length: environment.nebulaCount }, (_, i) =>
       <Nebula key={i} seed={seed} environment={environment} index={i} />
     )}
 
-    <GalacticBand seed={seed} strength={environment.galacticBandStrength} rotation={environment.galacticBandRotation} />
-    <StarLayer seed={seed ^ 0x127a} count={Math.round(1500 * density)} size={0.19} color="#d7e5ff" opacity={0.52} />
-    <StarLayer seed={seed ^ 0x61c3} count={Math.round(610 * density)} size={0.38} color="#fff3d4" opacity={0.76} />
-    <StarLayer seed={seed ^ 0xa419} count={Math.round(115 * density)} size={0.72} color="#e8f3ff" opacity={0.92} />
+    <GalacticBand
+      seed={seed}
+      strength={environment.galacticBandStrength}
+      rotation={environment.galacticBandRotation}
+      color={environment.hazeSecondary}
+    />
+
+    <StarLayer seed={seed ^ 0x127a} count={Math.round(1600 * density)} size={0.18} color="#cfe4ff" opacity={0.5} />
+    <StarLayer seed={seed ^ 0x61c3} count={Math.round(680 * density)} size={0.38} color="#ffecc8" opacity={0.78} />
+    <StarLayer seed={seed ^ 0xa419} count={Math.round(135 * density)} size={0.76} color="#edf7ff" opacity={0.96} />
   </group>
 }
 
@@ -223,7 +285,7 @@ export function SpeedDust({ seed, density, controls }: { seed: number; density: 
   const { camera } = useThree()
   const geometry = useMemo(() => {
     const r = rng(seed ^ 0x77be12)
-    const count = Math.max(30, Math.round(58 * density))
+    const count = Math.max(36, Math.round(68 * density))
     const positions = new Float32Array(count * 6)
     for (let i = 0; i < count; i++) {
       const x = (r() - 0.5) * 34
@@ -251,8 +313,12 @@ export function SpeedDust({ seed, density, controls }: { seed: number; density: 
     if (!initialized.current) {
       previous.current.copy(camera.position)
       for (let i = 0; i < arr.length; i += 6) {
-        arr[i] += camera.position.x; arr[i + 1] += camera.position.y; arr[i + 2] += camera.position.z
-        arr[i + 3] = arr[i]; arr[i + 4] = arr[i + 1]; arr[i + 5] = arr[i + 2]
+        arr[i] += camera.position.x
+        arr[i + 1] += camera.position.y
+        arr[i + 2] += camera.position.z
+        arr[i + 3] = arr[i]
+        arr[i + 4] = arr[i + 1]
+        arr[i + 5] = arr[i + 2]
       }
       initialized.current = true
     }
@@ -260,7 +326,7 @@ export function SpeedDust({ seed, density, controls }: { seed: number; density: 
     const velocity = camera.position.clone().sub(previous.current)
     previous.current.copy(camera.position)
     const speed = velocity.length()
-    const trail = velocity.clone().multiplyScalar(-Math.min(10, 3 + speed * 22))
+    const trail = velocity.clone().multiplyScalar(-Math.min(13, 3 + speed * 25))
     const r = rng((seed + Math.floor(camera.position.x * 11) + Math.floor(camera.position.z * 17)) | 0)
 
     for (let i = 0; i < arr.length; i += 6) {
@@ -269,17 +335,31 @@ export function SpeedDust({ seed, density, controls }: { seed: number; density: 
         x = camera.position.x + (r() - 0.5) * 34
         y = camera.position.y + (r() - 0.5) * 24
         z = camera.position.z + (r() - 0.5) * 34
-        arr[i] = x; arr[i + 1] = y; arr[i + 2] = z
+        arr[i] = x
+        arr[i + 1] = y
+        arr[i + 2] = z
       }
       arr[i + 3] = x + trail.x
       arr[i + 4] = y + trail.y
       arr[i + 5] = z + trail.z
     }
     attr.needsUpdate = true
-    if (material.current) material.current.opacity = controls.current.boost ? 0.36 : THREE.MathUtils.clamp(speed * 0.65, 0.025, 0.16)
+    if (material.current) {
+      material.current.opacity = controls.current.boost
+        ? 0.46
+        : THREE.MathUtils.clamp(speed * 0.72, 0.035, 0.19)
+    }
   })
 
   return <lineSegments geometry={geometry}>
-    <lineBasicMaterial ref={material} color="#dcecff" transparent opacity={0.03} depthWrite={false} blending={THREE.AdditiveBlending} />
+    <lineBasicMaterial
+      ref={material}
+      color="#dcecff"
+      transparent
+      opacity={0.04}
+      depthWrite={false}
+      blending={THREE.AdditiveBlending}
+      toneMapped={false}
+    />
   </lineSegments>
 }
