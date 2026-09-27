@@ -9,12 +9,13 @@ import type { Controls, SystemData } from './space/types'
 
 function Scene({ system, controls }: { system: SystemData; controls: MutableRefObject<Controls> }) {
   return <>
-    <fog attach="fog" args={['#010207', 125, 340]} />
+    <color attach="background" args={[system.environment.fogColor]} />
+    <fogExp2 attach="fog" args={[system.environment.fogColor, system.environment.fogDensity]} />
     <CosmicBackdrop seed={system.seed} environment={system.environment} />
     <CelestialSystem system={system} />
     <SpeedDust seed={system.seed} density={system.environment.dustDensity} controls={controls} />
     <FlightController controls={controls} />
-    <PostProcessing />
+    <PostProcessing environment={system.environment} />
   </>
 }
 
