@@ -219,11 +219,11 @@ export function CosmicBackdrop({ seed, environment }: { seed: number; environmen
   </group>
 }
 
-export function SpeedDust({ seed, controls }: { seed: number; controls: MutableRefObject<Controls> }) {
+export function SpeedDust({ seed, density, controls }: { seed: number; density: number; controls: MutableRefObject<Controls> }) {
   const { camera } = useThree()
   const geometry = useMemo(() => {
     const r = rng(seed ^ 0x77be12)
-    const count = 65
+    const count = Math.max(30, Math.round(58 * density))
     const positions = new Float32Array(count * 6)
     for (let i = 0; i < count; i++) {
       const x = (r() - 0.5) * 34
@@ -237,7 +237,7 @@ export function SpeedDust({ seed, controls }: { seed: number; controls: MutableR
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     return g
-  }, [seed])
+  }, [seed, density])
 
   const previous = useRef(new THREE.Vector3())
   const initialized = useRef(false)
